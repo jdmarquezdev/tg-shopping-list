@@ -92,6 +92,10 @@ def read_shopping_list() -> List[Section]:
             # Detectar sección (## Nombre)
             if line_stripped.startswith("## "):
                 section_name = line_stripped[3:].strip()
+                # Ignorar secciones que empiezan con "Fase" (documentación interna)
+                if section_name.startswith("Fase"):
+                    current_section = None  # No añadir esta sección
+                    continue
                 current_section = Section(name=section_name, items=[])
                 sections.append(current_section)
                 continue
@@ -113,11 +117,17 @@ def read_shopping_list() -> List[Section]:
                 
                 current_section.items.append(Item(name=name, checked=checked))
     
-    # Si no hay secciones, devolver General vacía
-    if not sections:
-        sections = [Section(name="General", items=[])]
+    # Filtrar secciones vacías (sin items o todos tachados)
+    visible_sections = [
+        section for section in sections
+        if any(not item.checked for item in section.items)
+    ]
     
-    return sections
+    # Si no hay secciones visibles, devolver General vacía
+    if not visible_sections:
+        visible_sections = [Section(name="General", items=[])]
+    
+    return visible_sections
 
 
 def write_shopping_list(sections: List[Section]):
