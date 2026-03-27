@@ -23,7 +23,7 @@ app.add_middleware(
 )
 
 # Servir frontend estático
-frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
+frontend_path = os.path.join(os.path.dirname(__file__), "frontend")
 # Solo montar /assets si existe la carpeta (opcional)
 assets_path = os.path.join(frontend_path, "assets")
 if os.path.isdir(assets_path):
