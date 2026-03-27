@@ -1,6 +1,7 @@
 import os
 import json
 from typing import List, Optional
+from datetime import datetime
 from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -10,6 +11,7 @@ from pydantic import BaseModel
 # Configuración desde variables de entorno
 SHOPPING_FILE_PATH = os.getenv("SHOPPING_FILE_PATH", "SHOPPING.md")
 ALLOWED_USER_ID = os.getenv("ALLOWED_USER_ID", "5676298")
+NOTIFICATION_FILE_PATH = os.getenv("NOTIFICATION_FILE_PATH", "/root/.openclaw/workspace/.shopping-changes.json")
 
 app = FastAPI(title="Shopping List API")
 
@@ -54,6 +56,12 @@ class ItemAdd(BaseModel):
 class ItemToggle(BaseModel):
     name: str
     section: Optional[str] = "General"
+
+
+class ItemComprado(BaseModel):
+    section: str
+    item: str
+    action: str  # "checked" or "removed"
 
 
 def verify_user(x_telegram_user: Optional[str] = Header(None)):
@@ -135,6 +143,39 @@ def find_section(sections: List[Section], name: str) -> Optional[Section]:
     return None
 
 
+def write_notification(section: str, item: str, action: str):
+    """Escribe una notificación en el archivo JSON para que Sancho pueda pollar"""
+    notification = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "section": section,
+        "item": item,
+        "action": action
+    }
+    
+    # Leer notificaciones existentes o crear lista vacía
+    notifications = []
+    if os.path.exists(NOTIFICATION_FILE_PATH):
+        try:
+            with open(NOTIFICATION_FILE_PATH, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+                if content:
+                    notifications = json.loads(content)
+        except (json.JSONDecodeError, IOError):
+            notifications = []
+    
+    # Añadir nueva notificación
+    notifications.append(notification)
+    
+    # Escribir de vuelta (mantener solo últimas 100 notificaciones)
+    notifications = notifications[-100:]
+    
+    # Asegurar que el directorio existe
+    os.makedirs(os.path.dirname(NOTIFICATION_FILE_PATH), exist_ok=True)
+    
+    with open(NOTIFICATION_FILE_PATH, "w", encoding="utf-8") as f:
+        json.dump(notifications, f, indent=2, ensure_ascii=False)
+
+
 @app.get("/api/lista")
 def get_lista(user: str = Depends(verify_user)):
     """Obtiene la lista de la compra con secciones"""
@@ -185,6 +226,50 @@ def toggle_item(item: ItemToggle, user: str = Depends(verify_user)):
     
     write_shopping_list(sections)
     return {"message": "Item actualizado", "sections": sections}
+
+
+@app.post("/api/comprado")
+def item_comprado(data: ItemComprado, user: str = Depends(verify_user)):
+    """
+    Endpoint que recibe notificación cuando JD marca algo como comprado.
+    Actualiza SHOPPING.md y escribe notificación para que Sancho pueda enterarse.
+    """
+    if data.action not in ["checked", "removed"]:
+        raise HTTPException(status_code=400, detail="Action must be 'checked' or 'removed'")
+    
+    sections = read_shopping_list()
+    section = find_section(sections, data.section)
+    
+    if not section:
+        # Si la sección no existe, crearla
+        section = Section(name=data.section, items=[])
+        sections.append(section)
+    
+    # Buscar o crear el item
+    found = False
+    for i in section.items:
+        if i.name == data.item:
+            if data.action == "checked":
+                i.checked = True
+            elif data.action == "removed":
+                # Eliminar el item
+                section.items.remove(i)
+            found = True
+            break
+    
+    if not found and data.action == "checked":
+        # Si no existe y es "checked", añadirlo marcado
+        section.items.append(Item(name=data.item, checked=True))
+    
+    write_shopping_list(sections)
+    
+    # Escribir notificación para Sancho
+    write_notification(data.section, data.item, data.action)
+    
+    return {
+        "message": f"Item {data.action}: {data.item} en {data.section}",
+        "notification_written": True
+    }
 
 
 if __name__ == "__main__":
