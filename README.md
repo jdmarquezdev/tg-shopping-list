@@ -1,14 +1,16 @@
 # 🛒 Shopping Mini App
 
-Telegram Mini App para gestionar tu lista de la compra.
+Telegram Mini App para gestionar tu lista de la compra con soporte para **secciones**.
 
 ## Características
 
 - ✅ Añadir productos a la lista
+- ✅ Organizar por secciones (Mercadona, Lidl, etc.)
 - ✅ Marcar/desmarcar productos como comprados
 - ✅ Tema nativo de Telegram (claro/oscuro automático)
 - ✅ Feedback háptico en móvil
 - ✅ Autenticación por usuario de Telegram
+- ✅ Secciones colapsables
 
 ## Estructura
 
@@ -23,6 +25,27 @@ tg-shopping-list/
 ├── docker-compose.yml      # Desarrollo local
 ├── README.md               # Este archivo
 └── .gitignore
+```
+
+## Formato del archivo SHOPPING.md
+
+```markdown
+# SHOPPING
+
+## General
+- agua
+- agua de Diego
+
+## Mercadona
+- leche
+- pan
+
+## Lidl
+- [x] margarina
+- podadora de altura
+
+## Family Cash
+- guantes de nitrilo negros
 ```
 
 ## Despliegue
@@ -76,9 +99,9 @@ El frontend se sirve directamente desde Telegram, pero puedes abrir `frontend/in
 
 | Método | Endpoint | Descripción |
 |--------|----------|-------------|
-| GET | `/api/lista` | Obtiene la lista completa |
-| POST | `/api/agregar` | Añade un producto |
-| POST | `/api/toggle` | Marca/desmarca producto |
+| GET | `/api/lista` | Obtiene la lista completa con secciones |
+| POST | `/api/agregar` | Añade un producto a una sección |
+| POST | `/api/toggle` | Marca/desmarca producto en una sección |
 
 ### Headers requeridos
 
@@ -89,24 +112,41 @@ X-Telegram-User: <user_id>
 ### Ejemplos
 
 ```bash
-# Obtener lista
+# Obtener lista con secciones
 curl -H "X-Telegram-User: 123456789" https://tu-dominio.com/api/lista
 
-# Añadir item
+# Respuesta:
+# {
+#   "sections": [
+#     {"name": "General", "items": [{"name": "agua", "checked": false}]},
+#     {"name": "Mercadona", "items": []},
+#     {"name": "Lidl", "items": [{"name": "margarina", "checked": true}]}
+#   ]
+# }
+
+# Añadir item a sección específica
 curl -X POST -H "X-Telegram-User: 123456789" \
   -H "Content-Type: application/json" \
-  -d '{"name": "Leche"}' \
+  -d '{"name": "Leche", "section": "Mercadona"}' \
   https://tu-dominio.com/api/agregar
 
-# Toggle item
+# Añadir item a sección General (por defecto)
 curl -X POST -H "X-Telegram-User: 123456789" \
   -H "Content-Type: application/json" \
-  -d '{"name": "Leche"}' \
+  -d '{"name": "Agua"}' \
+  https://tu-dominio.com/api/agregar
+
+# Toggle item en sección específica
+curl -X POST -H "X-Telegram-User: 123456789" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Leche", "section": "Mercadona"}' \
   https://tu-dominio.com/api/toggle
 ```
 
 ## Notas
 
 - El archivo `SHOPPING.md` se crea automáticamente en la primera escritura
-- Formato del archivo: `[x] producto` (comprado) o `[ ] producto` (pendiente)
+- Si no se especifica sección al añadir, el item va a "General"
+- Las secciones se crean automáticamente cuando se añade el primer item
 - Solo el usuario configurado en `ALLOWED_USER_ID` puede modificar la lista
+- Las secciones se pueden colapsar/expandir en la interfaz

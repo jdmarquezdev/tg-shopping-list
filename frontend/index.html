@@ -35,16 +35,28 @@
             display: flex;
             gap: 8px;
             margin-bottom: 20px;
+            flex-wrap: wrap;
         }
 
         .add-form input {
             flex: 1;
+            min-width: 150px;
             padding: 12px;
             border: 1px solid var(--tg-theme-hint-color, #cccccc);
             border-radius: 8px;
             font-size: 16px;
             background-color: var(--tg-theme-secondary-bg-color, #f0f0f0);
             color: var(--tg-theme-text-color, #000000);
+        }
+
+        .add-form select {
+            padding: 12px;
+            border: 1px solid var(--tg-theme-hint-color, #cccccc);
+            border-radius: 8px;
+            font-size: 16px;
+            background-color: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            color: var(--tg-theme-text-color, #000000);
+            min-width: 120px;
         }
 
         .add-form button {
@@ -62,8 +74,47 @@
             opacity: 0.8;
         }
 
+        .section {
+            margin-bottom: 20px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px;
+            background-color: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .section-header:active {
+            opacity: 0.8;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--tg-theme-text-color, #000000);
+        }
+
+        .section-toggle {
+            font-size: 18px;
+            transition: transform 0.2s;
+        }
+
+        .section-toggle.collapsed {
+            transform: rotate(-90deg);
+        }
+
         .shopping-list {
             list-style: none;
+        }
+
+        .shopping-list.collapsed {
+            display: none;
         }
 
         .shopping-item {
@@ -133,6 +184,12 @@
             border-radius: 8px;
             margin-bottom: 16px;
         }
+
+        .section-item-count {
+            font-size: 14px;
+            color: var(--tg-theme-hint-color, #999999);
+            margin-left: 8px;
+        }
     </style>
 </head>
 <body>
@@ -143,12 +200,15 @@
         
         <form class="add-form" id="addForm">
             <input type="text" id="itemInput" placeholder="Añadir producto..." required>
+            <select id="sectionSelect">
+                <option value="General">General</option>
+            </select>
             <button type="submit">Añadir</button>
         </form>
         
         <div id="loading" class="loading">Cargando...</div>
         
-        <ul class="shopping-list" id="shoppingList"></ul>
+        <div id="sectionsContainer"></div>
     </div>
 
     <script>
@@ -169,12 +229,14 @@
         const API_BASE = window.API_BASE_URL || '/api';
 
         // Estado
-        let items = [];
+        let sections = [];
+        let collapsedSections = new Set();
 
         // Elementos DOM
         const addForm = document.getElementById('addForm');
         const itemInput = document.getElementById('itemInput');
-        const shoppingList = document.getElementById('shoppingList');
+        const sectionSelect = document.getElementById('sectionSelect');
+        const sectionsContainer = document.getElementById('sectionsContainer');
         const loading = document.getElementById('loading');
         const errorDiv = document.getElementById('error');
 
@@ -185,6 +247,13 @@
             setTimeout(() => {
                 errorDiv.style.display = 'none';
             }, 5000);
+        }
+
+        // Escapar HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
         // Cargar lista
@@ -206,8 +275,9 @@
                 }
                 
                 const data = await response.json();
-                items = data.items || [];
-                renderList();
+                sections = data.sections || [];
+                updateSectionSelect();
+                renderSections();
             } catch (err) {
                 showError(err.message);
             } finally {
@@ -215,26 +285,63 @@
             }
         }
 
-        // Renderizar lista
-        function renderList() {
-            if (items.length === 0) {
-                shoppingList.innerHTML = '<li class="empty-state">La lista está vacía</li>';
+        // Actualizar dropdown de secciones
+        function updateSectionSelect() {
+            const currentSelection = sectionSelect.value;
+            sectionSelect.innerHTML = sections.map(s => 
+                `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`
+            ).join('');
+            
+            // Mantener selección si existe
+            if (sections.some(s => s.name === currentSelection)) {
+                sectionSelect.value = currentSelection;
+            }
+        }
+
+        // Toggle colapsar sección
+        function toggleSection(sectionName) {
+            if (collapsedSections.has(sectionName)) {
+                collapsedSections.delete(sectionName);
+            } else {
+                collapsedSections.add(sectionName);
+            }
+            renderSections();
+            tg.HapticFeedback.impactOccurred('light');
+        }
+
+        // Renderizar secciones
+        function renderSections() {
+            if (sections.length === 0 || sections.every(s => s.items.length === 0)) {
+                sectionsContainer.innerHTML = '<div class="empty-state">La lista está vacía</div>';
                 return;
             }
 
-            shoppingList.innerHTML = items.map((item, index) => `
-                <li class="shopping-item ${item.checked ? 'checked' : ''}" data-index="${index}">
-                    <div class="checkbox" onclick="toggleItem(${index})"></div>
-                    <span class="item-name">${escapeHtml(item.name)}</span>
-                </li>
-            `).join('');
-        }
-
-        // Escapar HTML
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
+            sectionsContainer.innerHTML = sections.map(section => {
+                const isCollapsed = collapsedSections.has(section.name);
+                const checkedCount = section.items.filter(i => i.checked).length;
+                const totalCount = section.items.length;
+                
+                return `
+                    <div class="section">
+                        <div class="section-header" onclick="toggleSection('${escapeHtml(section.name)}')">
+                            <div>
+                                <span class="section-title">${escapeHtml(section.name)}</span>
+                                <span class="section-item-count">(${checkedCount}/${totalCount})</span>
+                            </div>
+                            <span class="section-toggle ${isCollapsed ? 'collapsed' : ''}">▼</span>
+                        </div>
+                        <ul class="shopping-list ${isCollapsed ? 'collapsed' : ''}">
+                            ${section.items.map((item, index) => `
+                                <li class="shopping-item ${item.checked ? 'checked' : ''}" data-section="${escapeHtml(section.name)}" data-index="${index}">
+                                    <div class="checkbox" onclick="toggleItem('${escapeHtml(section.name)}', ${index})"></div>
+                                    <span class="item-name">${escapeHtml(item.name)}</span>
+                                </li>
+                            `).join('')}
+                            ${section.items.length === 0 ? '<li class="empty-state" style="padding: 20px;">Sin items en esta sección</li>' : ''}
+                        </ul>
+                    </div>
+                `;
+            }).join('');
         }
 
         // Añadir item
@@ -242,6 +349,8 @@
             e.preventDefault();
             const name = itemInput.value.trim();
             if (!name) return;
+
+            const section = sectionSelect.value;
 
             try {
                 const userId = tg.initDataUnsafe?.user?.id?.toString();
@@ -255,7 +364,7 @@
                         'Content-Type': 'application/json',
                         'X-Telegram-User': userId
                     },
-                    body: JSON.stringify({ name })
+                    body: JSON.stringify({ name, section })
                 });
 
                 if (!response.ok) {
@@ -263,8 +372,9 @@
                 }
 
                 const data = await response.json();
-                items = data.items || [];
-                renderList();
+                sections = data.sections || [];
+                updateSectionSelect();
+                renderSections();
                 itemInput.value = '';
                 tg.HapticFeedback.impactOccurred('light');
             } catch (err) {
@@ -273,9 +383,11 @@
         });
 
         // Toggle item (función global)
-        window.toggleItem = async (index) => {
-            const item = items[index];
-            if (!item) return;
+        window.toggleItem = async (sectionName, index) => {
+            const section = sections.find(s => s.name === sectionName);
+            if (!section || !section.items[index]) return;
+
+            const item = section.items[index];
 
             try {
                 const userId = tg.initDataUnsafe?.user?.id?.toString();
@@ -289,7 +401,7 @@
                         'Content-Type': 'application/json',
                         'X-Telegram-User': userId
                     },
-                    body: JSON.stringify({ name: item.name })
+                    body: JSON.stringify({ name: item.name, section: sectionName })
                 });
 
                 if (!response.ok) {
@@ -297,8 +409,9 @@
                 }
 
                 const data = await response.json();
-                items = data.items || [];
-                renderList();
+                sections = data.sections || [];
+                updateSectionSelect();
+                renderSections();
                 tg.HapticFeedback.impactOccurred('light');
             } catch (err) {
                 showError(err.message);

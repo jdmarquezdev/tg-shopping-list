@@ -26,8 +26,19 @@ class Item(BaseModel):
     checked: bool = False
 
 
+class Section(BaseModel):
+    name: str
+    items: List[Item] = []
+
+
 class ItemAdd(BaseModel):
     name: str
+    section: Optional[str] = "General"
+
+
+class ItemToggle(BaseModel):
+    name: str
+    section: Optional[str] = "General"
 
 
 def verify_user(x_telegram_user: Optional[str] = Header(None)):
@@ -39,56 +50,116 @@ def verify_user(x_telegram_user: Optional[str] = Header(None)):
     return x_telegram_user
 
 
-def read_shopping_list() -> List[Item]:
-    """Lee la lista de la compra desde el archivo"""
+def read_shopping_list() -> List[Section]:
+    """Lee la lista de la compra desde el archivo con secciones"""
     if not os.path.exists(SHOPPING_FILE_PATH):
-        return []
+        return [Section(name="General", items=[])]
     
-    items = []
+    sections = []
+    current_section = None
+    
     with open(SHOPPING_FILE_PATH, "r", encoding="utf-8") as f:
         for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
+            line_stripped = line.strip()
+            
+            # Saltar líneas vacías y título principal
+            if not line_stripped or line_stripped == "# SHOPPING":
                 continue
-            checked = line.startswith("[x]") or line.startswith("[X]")
-            name = line[3:].strip() if checked else line.strip()
-            items.append(Item(name=name, checked=checked))
-    return items
+            
+            # Detectar sección (## Nombre)
+            if line_stripped.startswith("## "):
+                section_name = line_stripped[3:].strip()
+                current_section = Section(name=section_name, items=[])
+                sections.append(current_section)
+                continue
+            
+            # Detectar item (- item o - [x] item)
+            if line_stripped.startswith("- "):
+                if current_section is None:
+                    # Si no hay sección, crear "General"
+                    current_section = Section(name="General", items=[])
+                    sections.append(current_section)
+                
+                item_content = line_stripped[2:].strip()
+                checked = item_content.startswith("[x]") or item_content.startswith("[X]")
+                
+                if checked:
+                    name = item_content[3:].strip()
+                else:
+                    name = item_content
+                
+                current_section.items.append(Item(name=name, checked=checked))
+    
+    # Si no hay secciones, devolver General vacía
+    if not sections:
+        sections = [Section(name="General", items=[])]
+    
+    return sections
 
 
-def write_shopping_list(items: List[Item]):
-    """Escribe la lista de la compra en el archivo"""
+def write_shopping_list(sections: List[Section]):
+    """Escribe la lista de la compra en el archivo con formato de secciones"""
     with open(SHOPPING_FILE_PATH, "w", encoding="utf-8") as f:
-        f.write("# Lista de la compra\n\n")
-        for item in items:
-            if item.checked:
-                f.write(f"[x] {item.name}\n")
-            else:
-                f.write(f"[ ] {item.name}\n")
+        f.write("# SHOPPING\n\n")
+        
+        for section in sections:
+            f.write(f"## {section.name}\n")
+            for item in section.items:
+                if item.checked:
+                    f.write(f"- [x] {item.name}\n")
+                else:
+                    f.write(f"- {item.name}\n")
+            f.write("\n")
+
+
+def find_section(sections: List[Section], name: str) -> Optional[Section]:
+    """Busca una sección por nombre"""
+    for section in sections:
+        if section.name == name:
+            return section
+    return None
 
 
 @app.get("/api/lista")
 def get_lista(user: str = Depends(verify_user)):
-    """Obtiene la lista de la compra"""
-    items = read_shopping_list()
-    return {"items": items}
+    """Obtiene la lista de la compra con secciones"""
+    sections = read_shopping_list()
+    return {"sections": sections}
 
 
 @app.post("/api/agregar")
 def agregar_item(item: ItemAdd, user: str = Depends(verify_user)):
-    """Añade un nuevo item a la lista"""
-    items = read_shopping_list()
-    items.append(Item(name=item.name, checked=False))
-    write_shopping_list(items)
-    return {"message": "Item añadido", "items": items}
+    """Añade un nuevo item a la lista en la sección especificada"""
+    sections = read_shopping_list()
+    
+    # Buscar o crear la sección
+    section_name = item.section if item.section else "General"
+    section = find_section(sections, section_name)
+    
+    if not section:
+        section = Section(name=section_name, items=[])
+        sections.append(section)
+    
+    # Añadir el item
+    section.items.append(Item(name=item.name, checked=False))
+    write_shopping_list(sections)
+    
+    return {"message": "Item añadido", "sections": sections}
 
 
 @app.post("/api/toggle")
-def toggle_item(item: ItemAdd, user: str = Depends(verify_user)):
-    """Marca/desmarca un item de la lista"""
-    items = read_shopping_list()
+def toggle_item(item: ItemToggle, user: str = Depends(verify_user)):
+    """Marca/desmarca un item de la lista en la sección especificada"""
+    sections = read_shopping_list()
+    
+    section_name = item.section if item.section else "General"
+    section = find_section(sections, section_name)
+    
+    if not section:
+        raise HTTPException(status_code=404, detail="Section not found")
+    
     found = False
-    for i in items:
+    for i in section.items:
         if i.name == item.name:
             i.checked = not i.checked
             found = True
@@ -97,8 +168,8 @@ def toggle_item(item: ItemAdd, user: str = Depends(verify_user)):
     if not found:
         raise HTTPException(status_code=404, detail="Item not found")
     
-    write_shopping_list(items)
-    return {"message": "Item actualizado", "items": items}
+    write_shopping_list(sections)
+    return {"message": "Item actualizado", "sections": sections}
 
 
 if __name__ == "__main__":
