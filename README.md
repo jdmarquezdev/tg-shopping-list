@@ -5,7 +5,7 @@ Telegram Mini App para gestionar tu lista de la compra con soporte para **seccio
 ## Características
 
 - ✅ Añadir productos a la lista
-- ✅ Organizar por secciones (Mercadona, Lidl, etc.)
+- ✅ Organizar por secciones (Tienda1, Tienda2, etc.)
 - ✅ Marcar/desmarcar productos como comprados
 - ✅ Tema nativo de Telegram (claro/oscuro automático)
 - ✅ Feedback háptico en móvil
@@ -33,19 +33,19 @@ tg-shopping-list/
 # SHOPPING
 
 ## General
-- agua
-- agua de Diego
+- producto1
+- producto2
 
-## Mercadona
-- leche
-- pan
+## Tienda A
+- item1
+- item2
 
-## Lidl
-- [x] margarina
-- podadora de altura
+## Tienda B
+- [x] item3
+- item4
 
-## Family Cash
-- guantes de nitrilo negros
+## Tienda C
+- item5
 ```
 
 ## Despliegue
@@ -118,16 +118,16 @@ curl -H "X-Telegram-User: 123456789" https://tu-dominio.com/api/lista
 # Respuesta:
 # {
 #   "sections": [
-#     {"name": "General", "items": [{"name": "agua", "checked": false}]},
-#     {"name": "Mercadona", "items": []},
-#     {"name": "Lidl", "items": [{"name": "margarina", "checked": true}]}
+#     {"name": "General", "items": [{"name": "producto1", "checked": false}]},
+#     {"name": "Tienda1", "items": []},
+#     {"name": "Tienda2", "items": [{"name": "item3", "checked": true}]}
 #   ]
 # }
 
 # Añadir item a sección específica
 curl -X POST -H "X-Telegram-User: 123456789" \
   -H "Content-Type: application/json" \
-  -d '{"name": "Leche", "section": "Mercadona"}' \
+  -d '{"name": "Producto1", "section": "Tienda1"}' \
   https://tu-dominio.com/api/agregar
 
 # Añadir item a sección General (por defecto)
@@ -139,7 +139,7 @@ curl -X POST -H "X-Telegram-User: 123456789" \
 # Toggle item en sección específica
 curl -X POST -H "X-Telegram-User: 123456789" \
   -H "Content-Type: application/json" \
-  -d '{"name": "Leche", "section": "Mercadona"}' \
+  -d '{"name": "Producto1", "section": "Tienda1"}' \
   https://tu-dominio.com/api/toggle
 ```
 
