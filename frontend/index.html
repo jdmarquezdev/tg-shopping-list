@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lista de la Compra</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--tg-theme-bg-color, #ffffff);
+            color: var(--tg-theme-text-color, #000000);
+            padding: 16px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: var(--tg-theme-text-color, #000000);
+        }
+
+        .add-form {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .add-form input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid var(--tg-theme-hint-color, #cccccc);
+            border-radius: 8px;
+            font-size: 16px;
+            background-color: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            color: var(--tg-theme-text-color, #000000);
+        }
+
+        .add-form button {
+            padding: 12px 20px;
+            background-color: var(--tg-theme-button-color, #3390ec);
+            color: var(--tg-theme-button-text-color, #ffffff);
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .add-form button:active {
+            opacity: 0.8;
+        }
+
+        .shopping-list {
+            list-style: none;
+        }
+
+        .shopping-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            margin-bottom: 8px;
+            background-color: var(--tg-theme-secondary-bg-color, #f5f5f5);
+            border-radius: 8px;
+            gap: 12px;
+        }
+
+        .shopping-item.checked .item-name {
+            text-decoration: line-through;
+            opacity: 0.6;
+        }
+
+        .checkbox {
+            width: 24px;
+            height: 24px;
+            border: 2px solid var(--tg-theme-hint-color, #cccccc);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .shopping-item.checked .checkbox {
+            background-color: var(--tg-theme-button-color, #3390ec);
+            border-color: var(--tg-theme-button-color, #3390ec);
+        }
+
+        .checkbox::after {
+            content: '✓';
+            color: var(--tg-theme-button-text-color, #ffffff);
+            font-size: 16px;
+            display: none;
+        }
+
+        .shopping-item.checked .checkbox::after {
+            display: block;
+        }
+
+        .item-name {
+            flex: 1;
+            font-size: 16px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--tg-theme-hint-color, #999999);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--tg-theme-hint-color, #999999);
+        }
+
+        .error {
+            background-color: #ff4444;
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛒 Lista de la Compra</h1>
+        
+        <div id="error" class="error" style="display: none;"></div>
+        
+        <form class="add-form" id="addForm">
+            <input type="text" id="itemInput" placeholder="Añadir producto..." required>
+            <button type="submit">Añadir</button>
+        </form>
+        
+        <div id="loading" class="loading">Cargando...</div>
+        
+        <ul class="shopping-list" id="shoppingList"></ul>
+    </div>
+
+    <script>
+        // Inicializar Telegram WebApp
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+
+        // Configurar colores del tema
+        document.documentElement.style.setProperty('--tg-theme-bg-color', tg.backgroundColor || '#ffffff');
+        document.documentElement.style.setProperty('--tg-theme-text-color', tg.textColor || '#000000');
+        document.documentElement.style.setProperty('--tg-theme-button-color', tg.buttonColor || '#3390ec');
+        document.documentElement.style.setProperty('--tg-theme-button-text-color', tg.buttonTextColor || '#ffffff');
+        document.documentElement.style.setProperty('--tg-theme-secondary-bg-color', tg.secondaryBackgroundColor || '#f0f0f0');
+        document.documentElement.style.setProperty('--tg-theme-hint-color', tg.hintColor || '#999999');
+
+        // API base URL (configurable)
+        const API_BASE = window.API_BASE_URL || '/api';
+
+        // Estado
+        let items = [];
+
+        // Elementos DOM
+        const addForm = document.getElementById('addForm');
+        const itemInput = document.getElementById('itemInput');
+        const shoppingList = document.getElementById('shoppingList');
+        const loading = document.getElementById('loading');
+        const errorDiv = document.getElementById('error');
+
+        // Mostrar error
+        function showError(message) {
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // Cargar lista
+        async function loadList() {
+            try {
+                const userId = tg.initDataUnsafe?.user?.id?.toString();
+                if (!userId) {
+                    showError('No se pudo obtener el ID de usuario de Telegram');
+                    return;
+                }
+                const response = await fetch(`${API_BASE}/lista`, {
+                    headers: {
+                        'X-Telegram-User': userId
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Error al cargar la lista');
+                }
+                
+                const data = await response.json();
+                items = data.items || [];
+                renderList();
+            } catch (err) {
+                showError(err.message);
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        // Renderizar lista
+        function renderList() {
+            if (items.length === 0) {
+                shoppingList.innerHTML = '<li class="empty-state">La lista está vacía</li>';
+                return;
+            }
+
+            shoppingList.innerHTML = items.map((item, index) => `
+                <li class="shopping-item ${item.checked ? 'checked' : ''}" data-index="${index}">
+                    <div class="checkbox" onclick="toggleItem(${index})"></div>
+                    <span class="item-name">${escapeHtml(item.name)}</span>
+                </li>
+            `).join('');
+        }
+
+        // Escapar HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Añadir item
+        addForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = itemInput.value.trim();
+            if (!name) return;
+
+            try {
+                const userId = tg.initDataUnsafe?.user?.id?.toString();
+                if (!userId) {
+                    showError('No se pudo obtener el ID de usuario de Telegram');
+                    return;
+                }
+                const response = await fetch(`${API_BASE}/agregar`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Telegram-User': userId
+                    },
+                    body: JSON.stringify({ name })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Error al añadir el item');
+                }
+
+                const data = await response.json();
+                items = data.items || [];
+                renderList();
+                itemInput.value = '';
+                tg.HapticFeedback.impactOccurred('light');
+            } catch (err) {
+                showError(err.message);
+            }
+        });
+
+        // Toggle item (función global)
+        window.toggleItem = async (index) => {
+            const item = items[index];
+            if (!item) return;
+
+            try {
+                const userId = tg.initDataUnsafe?.user?.id?.toString();
+                if (!userId) {
+                    showError('No se pudo obtener el ID de usuario de Telegram');
+                    return;
+                }
+                const response = await fetch(`${API_BASE}/toggle`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Telegram-User': userId
+                    },
+                    body: JSON.stringify({ name: item.name })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Error al actualizar el item');
+                }
+
+                const data = await response.json();
+                items = data.items || [];
+                renderList();
+                tg.HapticFeedback.impactOccurred('light');
+            } catch (err) {
+                showError(err.message);
+            }
+        };
+
+        // Cargar lista al inicio
+        loadList();
+    </script>
+</body>
+</html>
