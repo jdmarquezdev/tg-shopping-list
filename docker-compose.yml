@@ -11,8 +11,5 @@ services:
       - SHOPPING_FILE_PATH=/data/SHOPPING.md
       - ALLOWED_USER_ID=${ALLOWED_USER_ID:-}
     volumes:
-      - shopping-data:/data
+      - /root/.openclaw/workspace/SHOPPING.md:/data/SHOPPING.md
     restart: unless-stopped
-
-volumes:
-  shopping-data:
