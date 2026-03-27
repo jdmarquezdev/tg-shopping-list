@@ -3,6 +3,8 @@ import json
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 # Configuración desde variables de entorno
@@ -19,6 +21,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Servir frontend estático
+frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
+app.mount("/assets", StaticFiles(directory=os.path.join(frontend_path, "assets")), name="assets")
+
+
+@app.get("/")
+def serve_frontend():
+    """Sirve el frontend (index.html)"""
+    return FileResponse(os.path.join(frontend_path, "index.html"))
 
 
 class Item(BaseModel):
