@@ -14,6 +14,12 @@ SHOPPING_FILE_PATH = os.getenv("SHOPPING_FILE_PATH", "/data/shared/SHOPPING.md")
 ALLOWED_USER_ID = os.getenv("ALLOWED_USER_ID", "5676298")
 NOTIFICATION_FILE_PATH = os.getenv("NOTIFICATION_FILE_PATH", "/root/.openclaw/workspace/.shopping-changes.json")
 
+# Log de configuración al arrancar (útil para debugging)
+print(f"[CONFIG] SHOPPING_FILE_PATH: {SHOPPING_FILE_PATH}")
+print(f"[CONFIG] ALLOWED_USER_ID: {ALLOWED_USER_ID}")
+print(f"[CONFIG] NOTIFICATION_FILE_PATH: {NOTIFICATION_FILE_PATH}")
+print(f"[CONFIG] File exists: {os.path.exists(SHOPPING_FILE_PATH)}")
+
 app = FastAPI(title="Shopping List API")
 
 # CORS habilitado
@@ -114,6 +120,13 @@ def verify_user(x_telegram_user: Optional[str] = Header(None)):
 def read_shopping_list() -> List[Section]:
     """Lee la lista de la compra desde el archivo con secciones"""
     if not os.path.exists(SHOPPING_FILE_PATH):
+        print(f"[WARNING] Archivo no encontrado: {SHOPPING_FILE_PATH}")
+        print(f"[WARNING] Directorio /data existe: {os.path.exists('/data')}")
+        if os.path.exists('/data'):
+            try:
+                print(f"[WARNING] Contenido de /data: {os.listdir('/data')}")
+            except Exception as e:
+                print(f"[WARNING] Error listando /data: {e}")
         return [Section(name="General", items=[])]
     
     sections = []
