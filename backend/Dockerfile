@@ -16,7 +16,7 @@ COPY frontend ./frontend
 EXPOSE 8000
 
 # Variables de entorno (se pueden override con docker run -e)
-ENV SHOPPING_FILE_PATH=/data/SHOPPING.md
+ENV SHOPPING_FILE_PATH=/data/shared/SHOPPING.md
 ENV ALLOWED_USER_ID=
 
 # Crear directorio para datos
