@@ -9,7 +9,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 # Configuración desde variables de entorno
-SHOPPING_FILE_PATH = os.getenv("SHOPPING_FILE_PATH", "SHOPPING.md")
+# Por defecto apunta a shared/SHOPPING.md (el archivo real está en el workspace compartido)
+SHOPPING_FILE_PATH = os.getenv("SHOPPING_FILE_PATH", "/data/shared/SHOPPING.md")
 ALLOWED_USER_ID = os.getenv("ALLOWED_USER_ID", "5676298")
 NOTIFICATION_FILE_PATH = os.getenv("NOTIFICATION_FILE_PATH", "/root/.openclaw/workspace/.shopping-changes.json")
 
